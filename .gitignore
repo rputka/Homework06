@@ -1,4 +1,8 @@
 server/data/
 node_modules/
 .DS_Store
+# Secrets: real settings live in .env (local) or the host's dashboard, never in git. .env.example is the template.
 .env
+.env.*
+!.env.example
+*.pem

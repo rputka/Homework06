@@ -80,3 +80,18 @@ test('browsing jobs filters by keyword, category, distance and budget', async ()
   const words = await marcus.get('/api/jobs?q=faucet%20drain');
   assert.ok(words.jobs.length >= 1 && words.jobs.every(j => /faucet/i.test(j.title + j.description)));
 });
+
+test('a double-submitted action only happens once', async () => {
+  const posted = await dana.post('/api/jobs', { title: 'Fix squeaky door', category: 'handyman', location: 'Austin, TX', experience: '0–2 years', budgetMin: 40, budgetMax: 80,
+    description: 'One interior door squeaks loudly. Oil or replace the hinges.' });
+  assert.equal(posted.ok, true, posted.error);
+  await marcus.post(`/api/jobs/${posted.id}/bids`, { price: 60, message: 'Quick fix, I have hinges in the van already.' });
+  const bidId = (await dana.get('/api/jobs/' + posted.id)).bids[0].id;
+  const results = await Promise.all([dana.post(`/api/bids/${bidId}/hire`), dana.post(`/api/bids/${bidId}/hire`)]);
+  assert.equal(results.filter(r => r.ok).length, 1, 'exactly one hire succeeds');
+  const funded = await Promise.all([dana.post(`/api/jobs/${posted.id}/fund`), dana.post(`/api/jobs/${posted.id}/fund`)]);
+  assert.equal(funded.filter(r => r.ok).length, 1, 'escrow is funded once');
+  const job = await dana.get('/api/jobs/' + posted.id);
+  assert.equal(job.job.history.filter(h => h.status === 'Worker Selected').length, 1);
+  assert.equal(job.transaction.events.length, 1);
+});

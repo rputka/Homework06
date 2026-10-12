@@ -6,7 +6,7 @@ Nearhand is a prototype of a freelance marketplace that connects employers who n
 
 ## Running it locally
 
-You need [Node.js](https://nodejs.org/) 22.13 or newer. There is no build step and nothing to install: the server uses only Node's built-in modules, including its built-in SQLite database.
+You need [Node.js](https://nodejs.org/) 22.13 or newer. There is no build step and, for local runs, nothing to install: the server uses Node's built-in modules, including its built-in SQLite database. (The one npm dependency, `pg`, is only needed for PostgreSQL; run `npm install` if you set `DATABASE_URL`.)
 
 1. Download or clone this repository.
 2. Run `npm start` in the project folder.
@@ -14,7 +14,9 @@ You need [Node.js](https://nodejs.org/) 22.13 or newer. There is no build step a
 
 The first start creates the database at `server/data/nearhand.db` and fills it with the seed data. The data then persists across restarts and is shared by everyone using that server. To start over, stop the server and run `npm run reset-db`. A database from before the relational schema is moved aside to `nearhand.legacy.db` automatically.
 
-Run the automated tests with `npm test` (Node's built-in test runner; no outside services are called).
+Run the automated tests with `npm test` (Node's built-in test runner; no outside services are called). To run the same tests against PostgreSQL, point them at a database you can write to: `DATABASE_URL=postgres://user@localhost:5432/nearhand_test npm test`. Each test file works in its own temporary schema, which is dropped afterward.
+
+All settings are environment variables, listed with explanations in [`.env.example`](.env.example).
 
 The site must be opened through the server, because the pages load their data from it. Maps load from the internet (Leaflet from cdnjs, map tiles from OpenStreetMap), so they need a connection.
 
@@ -42,7 +44,18 @@ Each user can choose which notification types are emailed to them in Edit profil
 
 ## Hosting
 
-The site needs a running Node server, so static hosts such as GitHub Pages can't run it on their own. Any host that runs Node with a persistent disk works (for example Render, Railway or Fly.io): use `npm start` as the start command, and set `DB_FILE` to a path on the persistent disk (uploaded photos are stored in an `uploads` folder next to it). The server reads `PORT` from the environment.
+The site needs a running Node server, so static hosts such as GitHub Pages can't run it on their own. The setup below uses only free plans: **Render** runs the server, and **Aiven** hosts the PostgreSQL database. Uploaded photos are stored in the database too, because Render's free servers lose their disk on every restart.
+
+1. **Aiven**: create a PostgreSQL service on the Free plan. From its Overview page, copy the **Service URI** and the **CA certificate**.
+2. **Render**: choose New > Blueprint and select this repository; [`render.yaml`](render.yaml) describes the service (build `npm ci`, start `npm start`, health check `/api/health`). When asked, enter:
+   - `DATABASE_URL`: the Aiven Service URI
+   - `AIVEN_CA_CERT`: the CA certificate text
+   - `APP_URL`: `https://<service-name>.onrender.com` (shown once the service exists; this also turns on secure cookies)
+3. The first start creates the tables and loads the seed data. Check `https://<service-name>.onrender.com/api/health`, which should say `"db":"up"`.
+
+To start the hosted data over, run `CONFIRM_RESET=1 npm run reset-db` with `DATABASE_URL` and `AIVEN_CA_CERT` set, then restart the service.
+
+Free-plan limits to know about: Render stops the server after 15 minutes without visitors, and the next visit waits about a minute while it starts again. Aiven's free PostgreSQL has 1 GB of storage, 20 connections and no backups, and may be powered off if it goes unused for a long time (Aiven emails first; power it back on from the console). Finished background jobs are deleted after a week to save space.
 
 ## Try it in two minutes
 
@@ -119,7 +132,7 @@ To restore the starting data, stop the server and run `npm run reset-db`.
 
 ## Architecture
 
-Nearhand is a client–server app with no third-party packages: a Node server with a relational SQLite database and a JSON API, and a browser front end written as native ES modules (no build step).
+Nearhand is a client–server app with one third-party package (the PostgreSQL driver): a Node server with a relational database (SQLite locally, PostgreSQL when hosted) and a JSON API, and a browser front end written as native ES modules (no build step).
 
 ```
 package.json              npm start / npm test / npm run reset-db  ("type": "module")
@@ -130,9 +143,11 @@ shared/                   ES modules used by both the browser and the server
 server/
   index.js                Starts the app (config from environment variables / .env)
   app.js                  Wires the database, services, queue, workers, storage and HTTP server together
-  config.js               Settings
-  db/schema.js            The relational schema, as ordered migrations
-  db/index.js             Opens SQLite (node:sqlite), runs migrations, query and transaction helpers
+  config.js               Settings (all from environment variables; see .env.example)
+  db/schema.js            The relational schema, as ordered migrations for SQLite and for PostgreSQL
+  db/index.js             Async query and transaction helpers over either database driver
+  db/sqlite.js            SQLite driver (node:sqlite), used locally and in tests by default
+  db/postgres.js          PostgreSQL driver (pg), used when DATABASE_URL is set
   services/               Business rules, one module per area: accounts, jobs (bids, escrow, reviews,
                           dashboard, payments), profiles (workers, settings, portfolio), messaging,
                           notifications; common.js has shared helpers
@@ -143,10 +158,11 @@ server/
   queue.js                Background jobs stored in the database, with retries and backoff
   workers/email.js        Background job: email a notification through Resend
   workers/geocode.js      Background job: look up a new city on OpenStreetMap and place it on the map
-  storage.js              Uploaded photos (local-disk driver; another driver, e.g. S3, can replace it)
+  storage.js              Uploaded photos, stored in the database (another driver, e.g. S3, can replace it)
   seed/                   Example data and generated placeholder images
   test/                   Automated tests (npm test)
-  data/                   The database and uploaded photos (not committed to git)
+  data/                   The local SQLite database (not committed to git)
+render.yaml               Render Blueprint for hosting (see Hosting)
 public/
   index.html              Page shell; loads Leaflet (maps) and js/main.js
   css/                    Styles: tokens (colors, fonts, light/dark), base, layout, components, pages, features
@@ -181,7 +197,7 @@ Fork the repository, make your changes on a branch, and open a pull request. Ide
 
 - Add a feature from the planned list
 - Add tests for more of the business rules in `server/services/`
-- Add an S3 or Cloudflare R2 driver next to `server/storage.js`
+- Add an S3 or Cloudflare R2 driver next to `server/storage.js`, so photos don't fill the database
 - Improve accessibility or the mobile layout
 
 ## License

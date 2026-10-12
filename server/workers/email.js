@@ -23,9 +23,9 @@ export function createEmailWorker({ db, config, log = console }) {
   const setStatus = (id, status, error = null) => db.run('UPDATE notifications SET email_status = ?, email_error = ?, email_at = ? WHERE id = ?', status, error, Date.now(), id);
 
   return async function sendEmail({ notificationId }) {
-    const n = db.get('SELECT * FROM notifications WHERE id = ?', notificationId);
+    const n = await db.get('SELECT * FROM notifications WHERE id = ?', notificationId);
     if (!n || n.email_status !== 'pending') return;
-    const user = db.get('SELECT name, email, email_prefs FROM users WHERE id = ?', n.user_id);
+    const user = await db.get('SELECT name, email, email_prefs FROM users WHERE id = ?', n.user_id);
     if (!user || JSON.parse(user.email_prefs || '{}')[n.type] === false) return setStatus(n.id, 'skipped');
     if (!configured) return setStatus(n.id, 'not-configured');
     const msg = renderEmail(n, user, config.appUrl, !!redirectTo);
@@ -37,6 +37,6 @@ export function createEmailWorker({ db, config, log = console }) {
     if (res.ok) return setStatus(n.id, 'sent');
     const detail = `Resend ${res.status}: ${(await res.text()).slice(0, 200)}`;
     if (res.status === 429 || res.status >= 500) throw new Error(detail); // busy or down: retry later
-    setStatus(n.id, 'failed', detail); // refused (e.g. an address Resend won't deliver to): don't retry
+    await setStatus(n.id, 'failed', detail); // refused (e.g. an address Resend won't deliver to): don't retry
   };
 }

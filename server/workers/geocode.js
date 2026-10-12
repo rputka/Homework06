@@ -22,31 +22,31 @@ export function createGeocodeWorker({ db, config, ctx, log = console }) {
   }
 
   /* Users and jobs whose city matches `key` and that have no map position yet. */
-  const waiting = key => ({
-    users: db.all('SELECT id, location FROM users WHERE lat IS NULL').filter(r => cityKey(r.location) === key),
-    jobs: db.all('SELECT id, location, employer_id, title FROM jobs WHERE lat IS NULL').filter(r => cityKey(r.location) === key)
+  const waiting = async key => ({
+    users: (await db.all('SELECT id, location FROM users WHERE lat IS NULL')).filter(r => cityKey(r.location) === key),
+    jobs: (await db.all('SELECT id, location, employer_id, title FROM jobs WHERE lat IS NULL')).filter(r => cityKey(r.location) === key)
   });
 
   return async function geocode({ location }) {
     const key = cityKey(location);
-    let city = db.get('SELECT name, lat, lon FROM cities WHERE id = ?', key);
+    let city = await db.get('SELECT name, lat, lon FROM cities WHERE id = ?', key);
     if (!city) {
       city = await search(location);
       if (!city) {
-        const w = waiting(key), owners = new Set([...w.users.map(u => u.id), ...w.jobs.map(j => j.employer_id)]);
-        for (const id of owners) notify(ctx, id, 'location', `We couldn't find "${location}" on the map`,
+        const w = await waiting(key), owners = new Set([...w.users.map(u => u.id), ...w.jobs.map(j => j.employer_id)]);
+        for (const id of owners) await notify(ctx, id, 'location', `We couldn't find "${location}" on the map`,
           'Check the spelling of the city and use the City, ST format (for example, Dallas, TX). Until then, it won\'t show on maps or in distance search.', '#/settings');
         log.log(`City lookup: no US city matches "${location}".`);
         return;
       }
-      db.tx(() => {
-        for (const id of new Set([cityKey(city.name), key])) db.run('INSERT OR IGNORE INTO cities (id, name, lat, lon, created_at) VALUES (?, ?, ?, ?, ?)', id, city.name, city.lat, city.lon, Date.now());
+      await db.tx(async () => {
+        for (const id of new Set([cityKey(city.name), key])) await db.run('INSERT INTO cities (id, name, lat, lon, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING', id, city.name, city.lat, city.lon, Date.now());
       });
     }
-    const w = waiting(key);
-    db.tx(() => {
-      for (const u of w.users) { const p = nudge(city, 'user' + u.id); db.run('UPDATE users SET location = ?, lat = ?, lon = ? WHERE id = ?', city.name, p.lat, p.lon, u.id); }
-      for (const j of w.jobs) { const p = nudge(city, 'job' + j.id); db.run('UPDATE jobs SET location = ?, lat = ?, lon = ? WHERE id = ?', city.name, p.lat, p.lon, j.id); }
+    const w = await waiting(key);
+    await db.tx(async () => {
+      for (const u of w.users) { const p = nudge(city, 'user' + u.id); await db.run('UPDATE users SET location = ?, lat = ?, lon = ? WHERE id = ?', city.name, p.lat, p.lon, u.id); }
+      for (const j of w.jobs) { const p = nudge(city, 'job' + j.id); await db.run('UPDATE jobs SET location = ?, lat = ?, lon = ? WHERE id = ?', city.name, p.lat, p.lon, j.id); }
     });
   };
 }

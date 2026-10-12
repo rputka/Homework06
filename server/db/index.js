@@ -1,68 +1,41 @@
-/* Opens the SQLite database (Node's built-in node:sqlite), runs pending migrations, and offers small query helpers.
-   All queries use ? parameters; prepared statements are cached. */
-import fs from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { MIGRATIONS } from './schema.js';
+/* Opens the database and offers small async query helpers. Two drivers share one interface: SQLite (Node's built-in
+   node:sqlite, the default for local runs and tests) and PostgreSQL (when DATABASE_URL is set, e.g. on Aiven).
+   All queries use ? parameters. Inside db.tx(fn), every db.* call made by fn (however deeply nested) runs on the
+   transaction's connection; AsyncLocalStorage carries it, so services don't pass connections around. */
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-export function openDatabase(file) {
-  if (file !== ':memory:') {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    moveAsideLegacyFile(file);
-  }
-  const raw = new DatabaseSync(file);
-  raw.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000;');
-  migrate(raw);
+export async function openDatabase(config, log = console) {
+  // Drivers load only when used: local SQLite runs need nothing installed, and Postgres runs skip node:sqlite.
+  const driver = config.databaseUrl ? await (await import('./postgres.js')).openPostgres(config, log) : (await import('./sqlite.js')).openSqlite(config.dbFile);
+  const als = new AsyncLocalStorage();
+  /* The open transaction this call belongs to, if any. A store is closed when its transaction ends, so work that
+     was started inside a transaction but runs later (a timer, a background job) can't use a finished connection. */
+  const current = () => { const s = als.getStore(); return s && s.open ? s : null; };
+  const clean = params => params.map(p => (p === undefined || (typeof p === 'number' && Number.isNaN(p)) ? null : typeof p === 'boolean' ? Number(p) : p));
+  const query = (mode, sql, params) => driver.query(current(), mode, sql, clean(params));
 
-  const statements = new Map();
-  const stmt = sql => { let s = statements.get(sql); if (!s) { s = raw.prepare(sql); statements.set(sql, s); } return s; };
-  const clean = params => params.map(p => (p === undefined ? null : typeof p === 'boolean' ? Number(p) : p));
-  let depth = 0;
-
-  const db = {
-    all: (sql, ...params) => stmt(sql).all(...clean(params)),
-    get: (sql, ...params) => stmt(sql).get(...clean(params)),
-    /* Returns { changes, lastInsertRowid }. */
-    run: (sql, ...params) => stmt(sql).run(...clean(params)),
-    insert: (sql, ...params) => Number(stmt(sql).run(...clean(params)).lastInsertRowid),
-    exec: sql => raw.exec(sql),
-    /* Runs fn inside one transaction (nested calls join the outer one). Rolls back if fn throws. */
+  return {
+    dialect: driver.dialect,
+    all: (sql, ...params) => query('all', sql, params),
+    get: (sql, ...params) => query('get', sql, params),
+    /* Resolves to { changes }. */
+    run: (sql, ...params) => query('run', sql, params),
+    /* Inserts one row and resolves to its new id. */
+    insert: (sql, ...params) => query('insert', sql, params),
+    /* Runs async fn inside one transaction (nested calls join the outer one). Rolls back if fn throws. */
     tx(fn) {
-      if (depth) return fn();
-      raw.exec('BEGIN IMMEDIATE'); depth++;
-      try { const result = fn(); raw.exec('COMMIT'); return result; }
-      catch (err) { raw.exec('ROLLBACK'); throw err; }
-      finally { depth--; }
+      if (current()) return fn();
+      return driver.transaction(async conn => {
+        const store = { conn, open: true };
+        try { return await als.run(store, fn); } finally { store.open = false; }
+      });
     },
-    getMeta: key => { const row = stmt('SELECT value FROM meta WHERE key = ?').get(key); return row ? row.value : null; },
-    setMeta: (key, value) => stmt('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(value)),
-    close: () => raw.close()
+    /* Runs fn outside any transaction, e.g. to start background work from inside one. */
+    outside: fn => als.exit(fn),
+    /* Runs fn while holding a lock shared by every server process on this database (first-run seeding). */
+    exclusive: fn => driver.exclusive(fn),
+    getMeta: async key => { const row = await query('get', 'SELECT value FROM meta WHERE key = ?', [key]); return row ? row.value : null; },
+    setMeta: (key, value) => query('run', 'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, String(value)]),
+    close: () => driver.close()
   };
-  return db;
-}
-
-function migrate(raw) {
-  const hasMeta = raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get();
-  let version = hasMeta ? Number((raw.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() || {}).value || 0) : 0;
-  for (; version < MIGRATIONS.length; version++) {
-    raw.exec('BEGIN');
-    try {
-      raw.exec(MIGRATIONS[version]);
-      raw.prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(version + 1));
-      raw.exec('COMMIT');
-    } catch (err) { raw.exec('ROLLBACK'); throw err; }
-  }
-}
-
-/* Databases from before the relational schema stored records as JSON in (id, data) tables. They can't be migrated
-   in place, so the old file is renamed to <name>.legacy.db and a fresh database is created. */
-function moveAsideLegacyFile(file) {
-  if (!fs.existsSync(file)) return;
-  const probe = new DatabaseSync(file);
-  const legacy = probe.prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = 'data'").get();
-  probe.close();
-  if (!legacy) return;
-  const target = file.replace(/\.db$/, '') + '.legacy.db';
-  for (const suffix of ['', '-wal', '-shm']) if (fs.existsSync(file + suffix)) fs.renameSync(file + suffix, target + suffix);
-  console.log(`Moved the old-format database to ${path.basename(target)}; starting a new one.`);
 }

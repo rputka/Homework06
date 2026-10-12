@@ -11,5 +11,8 @@
     "test": "node --test --test-concurrency=1 server/test/*.test.js",
     "reset-db": "node server/reset-db.js"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
 }

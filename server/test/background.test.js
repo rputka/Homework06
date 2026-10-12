@@ -28,10 +28,10 @@ const latestNotification = (email, type) => t.app.db.get('SELECT n.* FROM notifi
 
 test('notification emails are sent, and switched-off types are skipped', async () => {
   const dana = await t.as('dana@example.com'), marcus = await t.as('marcus@example.com');
-  const jobId = t.app.db.get("SELECT id FROM jobs WHERE title LIKE 'Replace kitchen faucet%'").id;
+  const jobId = (await t.app.db.get("SELECT id FROM jobs WHERE title LIKE 'Replace kitchen faucet%'")).id;
   await marcus.post(`/api/jobs/${jobId}/bids`, { price: 170, message: 'Revised: I can do it for a little less this week.' });
   await t.app.queue.drain();
-  assert.equal(latestNotification('dana@example.com', 'bid').email_status, 'sent');
+  assert.equal((await latestNotification('dana@example.com', 'bid')).email_status, 'sent');
   const sent = resend.calls.at(-1);
   assert.equal(sent.headers.authorization, 'Bearer test-key');
   assert.deepEqual(sent.body.to, ['dana@example.com']);
@@ -43,20 +43,20 @@ test('notification emails are sent, and switched-off types are skipped', async (
   const calls = resend.calls.length;
   await t.app.queue.drain();
   assert.equal(resend.calls.length, calls, 'no email sent');
-  assert.equal(latestNotification('dana@example.com', 'bid').email_status, 'skipped');
+  assert.equal((await latestNotification('dana@example.com', 'bid')).email_status, 'skipped');
 });
 
 test('refused emails fail without retrying; outages are retried', async () => {
   const marcus = await t.as('marcus@example.com');
-  const jobId = t.app.db.get("SELECT id FROM jobs WHERE title LIKE 'Move-out deep clean%'").id;
+  const jobId = (await t.app.db.get("SELECT id FROM jobs WHERE title LIKE 'Move-out deep clean%'")).id;
   resendStatus = 403;
   await marcus.post(`/api/jobs/${jobId}/bids`, { price: 250, message: 'I can clean the whole apartment in one long day.' });
   await t.app.queue.drain();
-  assert.equal(latestNotification('priya@example.com', 'bid').email_status, 'failed');
+  assert.equal((await latestNotification('priya@example.com', 'bid')).email_status, 'failed');
   resendStatus = 503;
   await marcus.post(`/api/jobs/${jobId}/bids`, { price: 240, message: 'Lowered my price after checking my schedule.' });
   await t.app.queue.drain();
-  const job = t.app.db.get("SELECT * FROM queue WHERE kind = 'email' ORDER BY id DESC LIMIT 1");
+  const job = await t.app.db.get("SELECT * FROM queue WHERE kind = 'email' ORDER BY id DESC LIMIT 1");
   assert.equal(job.status, 'pending', 'will be retried'); assert.equal(job.attempts, 1);
   assert.ok(job.run_at > Date.now(), 'after a delay');
   resendStatus = 200;
@@ -76,6 +76,6 @@ test('new cities are looked up in the background and placed on the map', async (
   const bad = await dana.post('/api/jobs', { title: 'Mystery job', category: 'cleaning', location: 'Zzyzxqtown, TX', experience: '0–2 years', budgetMin: 80, budgetMax: 160,
     description: 'This city does not exist anywhere at all.' });
   await t.app.queue.drain();
-  assert.match(latestNotification('dana@example.com', 'location').title, /Zzyzxqtown/);
+  assert.match((await latestNotification('dana@example.com', 'location')).title, /Zzyzxqtown/);
   assert.equal((await dana.get('/api/jobs/' + bad.id)).job.coords, null);
 });

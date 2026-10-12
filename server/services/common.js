@@ -18,59 +18,59 @@ export const toSummary = r => r && ({
   id: r.id, role: r.role, name: r.name, location: r.location, coords: coordsOf(r), avatar: r.avatar, verified: !!r.verified, createdAt: r.created_at,
   rating: { n: r.rating_n, avg: r.rating_avg || 0 }, completed: r.completed
 });
-export const userSummary = (db, id) => toSummary(db.get(`${SUMMARY_SQL} WHERE u.id = ?`, id));
-export function userSummaries(db, ids) {
+export const userSummary = async (db, id) => toSummary(await db.get(`${SUMMARY_SQL} WHERE u.id = ?`, id));
+export async function userSummaries(db, ids) {
   const unique = [...new Set(ids.filter(x => x != null))];
   if (!unique.length) return new Map();
-  return new Map(db.all(`${SUMMARY_SQL} WHERE u.id IN (${unique.map(() => '?').join(',')})`, ...unique).map(r => [r.id, toSummary(r)]));
+  return new Map((await db.all(`${SUMMARY_SQL} WHERE u.id IN (${unique.map(() => '?').join(',')})`, ...unique)).map(r => [r.id, toSummary(r)]));
 }
-export const allUserSummaries = (db, where, ...params) => db.all(`${SUMMARY_SQL} ${where}`, ...params).map(toSummary);
+export const allUserSummaries = async (db, where, ...params) => (await db.all(`${SUMMARY_SQL} ${where}`, ...params)).map(toSummary);
 
 /* The signed-in user, or a 401 error. Optionally requires a role. */
-export function requireUser(db, session, role) {
-  const u = session.userId && db.get('SELECT * FROM users WHERE id = ?', session.userId);
+export async function requireUser(db, session, role) {
+  const u = session.userId && await db.get('SELECT * FROM users WHERE id = ?', session.userId);
   if (!u) fail('Sign in to continue.', 401);
   if (role && u.role !== role) fail(role === 'employer' ? 'Only employers can do that.' : 'Only workers can do that.', 403);
   return u;
 }
 
 /* In-app notification; the email copy is sent by a background job, and the recipient's open pages hear about it. */
-export function notify(ctx, userId, type, title, body, link = '') {
+export async function notify(ctx, userId, type, title, body, link = '') {
   if (!userId) return;
-  const id = ctx.db.insert('INSERT INTO notifications (user_id, type, title, body, link, created_at) VALUES (?, ?, ?, ?, ?, ?)', userId, type, title, body, link, now());
-  ctx.queue.add('email', { notificationId: id });
+  const id = await ctx.db.insert('INSERT INTO notifications (user_id, type, title, body, link, created_at) VALUES (?, ?, ?, ?, ?, ?)', userId, type, title, body, link, now());
+  await ctx.queue.add('email', { notificationId: id });
   ctx.events.emit(userId, { type: 'notification' });
 }
 
 /* Categories: built-ins plus ones employers add. */
 export function ensureBuiltins(db) {
-  db.tx(() => {
-    for (const c of CATS) db.run('INSERT OR IGNORE INTO categories (id, name, icon, hue, custom, created_at) VALUES (?, ?, ?, ?, 0, ?)', c.id, c.name, c.icon, c.hue, 0);
-    for (const [name, [lat, lon]] of Object.entries(KNOWN_CITIES)) db.run('INSERT OR IGNORE INTO cities (id, name, lat, lon, created_at) VALUES (?, ?, ?, ?, 0)', cityKey(name), name, lat, lon);
+  return db.tx(async () => {
+    for (const c of CATS) await db.run('INSERT INTO categories (id, name, icon, hue, custom, created_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT DO NOTHING', c.id, c.name, c.icon, c.hue, 0);
+    for (const [name, [lat, lon]] of Object.entries(KNOWN_CITIES)) await db.run('INSERT INTO cities (id, name, lat, lon, created_at) VALUES (?, ?, ?, ?, 0) ON CONFLICT DO NOTHING', cityKey(name), name, lat, lon);
   });
 }
-export const categories = db => db.all('SELECT id, name, icon, hue, custom FROM categories ORDER BY name COLLATE NOCASE').map(c => ({ ...c, custom: !!c.custom }));
-export const categoryExists = (db, id) => !!db.get('SELECT 1 FROM categories WHERE id = ?', id);
+export const categories = async db => (await db.all('SELECT id, name, icon, hue, custom FROM categories ORDER BY lower(name)')).map(c => ({ ...c, custom: !!c.custom }));
+export const categoryExists = async (db, id) => !!(await db.get('SELECT 1 FROM categories WHERE id = ?', id));
 
 /* The category for a job form: an existing one, or a new one the employer typed (reusing any category with the
    same name). Call it last, after the rest of the form is valid, so rejected forms don't leave stray categories. */
-export function resolveCategory(db, d, userId) {
-  if (d.category !== NEW_CATEGORY) return categoryExists(db, d.category) ? d.category : fail('Choose a category.');
+export async function resolveCategory(db, d, userId) {
+  if (d.category !== NEW_CATEGORY) return (await categoryExists(db, d.category)) ? d.category : fail('Choose a category.');
   const name = String(d.newCategory || '').trim().replace(/\s+/g, ' ');
   if (name.length < 2 || name.length > 40 || !/[a-z]/i.test(name)) fail('Name the new category in 2 to 40 characters.');
-  const same = db.get('SELECT id FROM categories WHERE name = ?', name); // case-insensitive column
+  const same = await db.get('SELECT id FROM categories WHERE lower(name) = lower(?)', name);
   if (same) return same.id;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'category';
-  let id = 'cat-' + slug; for (let n = 2; categoryExists(db, id); n++) id = `cat-${slug}-${n}`;
-  db.run('INSERT INTO categories (id, name, icon, hue, custom, created_by, created_at) VALUES (?, ?, ?, 210, 1, ?, ?)', id, name[0].toUpperCase() + name.slice(1), GENERIC_CAT_ICON, userId, now());
+  let id = 'cat-' + slug; for (let n = 2; await categoryExists(db, id); n++) id = `cat-${slug}-${n}`;
+  await db.run('INSERT INTO categories (id, name, icon, hue, custom, created_by, created_at) VALUES (?, ?, ?, 210, 1, ?, ?)', id, name[0].toUpperCase() + name.slice(1), GENERIC_CAT_ICON, userId, now());
   return id;
 }
 
 /* Where something in a city goes on the map: near the city's center, nudged up to about two miles (stable per key)
    so markers don't stack. Returns { location, lat, lon, known }; unknown cities are looked up later by a background
    job (see workers/geocode.js), which fills in the position. */
-export function placeIn(db, typed, key) {
-  const city = db.get('SELECT name, lat, lon FROM cities WHERE id = ?', cityKey(typed));
+export async function placeIn(db, typed, key) {
+  const city = await db.get('SELECT name, lat, lon FROM cities WHERE id = ?', cityKey(typed));
   if (!city) return { location: String(typed).trim().replace(/\s+/g, ' '), lat: null, lon: null, known: false };
   return { location: city.name, ...nudge(city, key), known: true };
 }
@@ -80,9 +80,9 @@ export function nudge(city, key) {
 }
 
 /* Matches category text typed in a filter box: empty matches everything; otherwise an id or part of a name. */
-export function categoryMatcher(db, text) {
+export async function categoryMatcher(db, text) {
   const t = String(text || '').trim().toLowerCase();
   if (!t) return () => true;
-  const ids = new Set(categories(db).filter(c => c.id === t || c.name.toLowerCase().includes(t)).map(c => c.id));
+  const ids = new Set((await categories(db)).filter(c => c.id === t || c.name.toLowerCase().includes(t)).map(c => c.id));
   return id => ids.has(id);
 }

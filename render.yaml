@@ -1,0 +1,23 @@
+# Render Blueprint: New > Blueprint in the Render dashboard, pick this repository. Creates one free Node web
+# service that serves both the site and the API. The database is PostgreSQL on Aiven (see README > Hosting).
+services:
+  - type: web
+    name: nearhand
+    runtime: node
+    plan: free
+    # Closest Render region to the Aiven service (SF, California). It can't be changed after the service is created.
+    region: oregon
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Secrets and per-deploy values: Render asks for these when the Blueprint is first applied.
+      - key: DATABASE_URL
+        sync: false
+      - key: AIVEN_CA_CERT
+        sync: false
+      - key: APP_URL
+        sync: false

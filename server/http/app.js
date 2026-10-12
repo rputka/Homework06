@@ -23,7 +23,7 @@ const SECURITY_HEADERS = {
 };
 
 export function createHttpServer({ config, db, services, events, storage, log = console }) {
-  const sessions = createSessions(db, { days: config.sessionDays, secure: config.secureCookies });
+  const sessions = createSessions(db, { days: config.sessionDays, secure: config.secureCookies, log });
   const limiter = createRateLimiter();
   const table = routes({ services, storage, limiter });
   const compiled = table.map(r => ({ ...r, regex: new RegExp('^' + r.path.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$') }));
@@ -47,10 +47,22 @@ export function createHttpServer({ config, db, services, events, storage, log = 
     if (origin && new URL(origin).host !== req.headers.host) throw new HttpError(403, 'Cross-site requests are not allowed.');
   }
 
+  /* The visitor's address, for rate limits. In production the app runs behind Render's proxy, which appends the
+     address it received the request from to X-Forwarded-For; earlier entries come from the client and can be faked. */
+  const clientIp = req => {
+    const forwarded = config.production && String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean).at(-1);
+    return forwarded || req.socket.remoteAddress || '?';
+  };
+
   async function handleApi(req, res, url) {
-    const ip = req.socket.remoteAddress || '?';
+    const ip = clientIp(req);
+    if (url.pathname === '/api/health') {
+      // For the host's health checks and uptime monitors: is the server up, and can it reach the database?
+      try { await db.get('SELECT 1 AS up'); return sendJson(res, 200, { ok: true, db: 'up' }); }
+      catch (err) { log.error('Health check failed:', err.message); return sendJson(res, 503, { ok: false, db: 'down' }); }
+    }
     if (url.pathname === '/api/events') {
-      const session = sessions.load(req);
+      const session = await sessions.load(req);
       if (!session.userId) return sendJson(res, 401, { ok: false, error: 'Sign in to continue.' });
       return events.connect(session.userId, req, res);
     }
@@ -60,10 +72,10 @@ export function createHttpServer({ config, db, services, events, storage, log = 
       checkCsrf(req);
       if (!limiter.allow('write:' + ip, 120, 60000)) throw new HttpError(429, 'Too many requests. Wait a minute and try again.');
     }
-    const session = sessions.load(req);
+    const session = await sessions.load(req);
     const body = req.method === 'GET' || req.method === 'DELETE' ? {} : await readJson(req);
     const result = await route.handler({ session, params: url.pathname.match(route.regex).groups || {}, query: Object.fromEntries(url.searchParams), body, ip });
-    sessions.save(session, res);
+    await sessions.save(session, res);
     sendJson(res, 200, { ok: true, ...result });
   }
 
@@ -75,10 +87,18 @@ export function createHttpServer({ config, db, services, events, storage, log = 
     });
   }
 
+  /* Uploaded photos, from the database. Names are content hashes, so a URL's bytes never change: browsers and
+     proxies may cache them for a year. */
+  async function serveUpload(res, urlPath) {
+    const photo = await storage.read(urlPath);
+    if (!photo) { res.writeHead(404, { ...SECURITY_HEADERS, 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+    res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': photo.type, 'Content-Length': photo.bytes.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+    res.end(photo.bytes);
+  }
+
   /* Static files: uploads, the shared modules, and public/. Paths are resolved and checked so they can't escape. */
-  function handleStatic(req, res, url) {
-    const upload = storage.fileFor(url.pathname);
-    if (upload) return serveFile(res, upload, 'public, max-age=31536000, immutable');
+  async function handleStatic(req, res, url) {
+    if (storage.isUploadUrl(url.pathname)) return serveUpload(res, url.pathname);
     const rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
     const [base, sub] = rel.startsWith('/shared/') ? [SHARED, rel.slice('/shared/'.length)] : [PUBLIC, rel.slice(1)];
     const file = path.resolve(base, sub);
@@ -91,7 +111,7 @@ export function createHttpServer({ config, db, services, events, storage, log = 
     try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); return res.end(); }
     try {
       if (url.pathname.startsWith('/api/')) await handleApi(req, res, url);
-      else if (req.method === 'GET' || req.method === 'HEAD') handleStatic(req, res, url);
+      else if (req.method === 'GET' || req.method === 'HEAD') await handleStatic(req, res, url);
       else { res.writeHead(405, SECURITY_HEADERS); res.end(); }
     } catch (err) {
       if (!(err instanceof HttpError)) log.error(err);

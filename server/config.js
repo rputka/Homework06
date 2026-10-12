@@ -1,4 +1,4 @@
-/* Server settings, read from environment variables (a .env file is loaded by `npm start`). */
+/* Server settings, read from environment variables (a .env file is loaded by `npm start`). See .env.example. */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -6,11 +6,15 @@ export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 export function loadConfig(env = process.env) {
   const port = Number(env.PORT) || 3000;
-  const dbFile = env.DB_FILE || path.join(ROOT, 'server', 'data', 'nearhand.db');
   return {
     port,
-    dbFile,
-    uploadsDir: env.UPLOADS_DIR || path.join(path.dirname(dbFile === ':memory:' ? path.join(ROOT, 'server', 'data', 'x') : dbFile), 'uploads'),
+    production: env.NODE_ENV === 'production',
+    // PostgreSQL when DATABASE_URL is set (e.g. Aiven); otherwise a local SQLite file.
+    databaseUrl: env.DATABASE_URL || null,
+    dbCa: env.AIVEN_CA_CERT ? env.AIVEN_CA_CERT.replace(/\\n/g, '\n') : null, // PEM; "\n" escapes allowed for one-line env values
+    pgPoolMax: env.PG_POOL_MAX,
+    pgSchema: env.PG_SCHEMA || null, // tests only: run in a throwaway schema
+    dbFile: env.DB_FILE || path.join(ROOT, 'server', 'data', 'nearhand.db'),
     appUrl: (env.APP_URL || `http://localhost:${port}`).replace(/\/$/, ''),
     sessionDays: Number(env.SESSION_DAYS) || 30,
     secureCookies: env.SECURE_COOKIES === '1' || (env.APP_URL || '').startsWith('https://'),

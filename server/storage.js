@@ -1,7 +1,6 @@
-/* Where uploaded photos are kept. Services only use put() and isUploadUrl(), so another driver (for example S3 or
-   Cloudflare R2) can replace this local-disk one without changing them. */
-import fs from 'node:fs';
-import path from 'node:path';
+/* Where uploaded photos are kept: the `uploads` table, so they survive hosts whose disk is wiped on restart. Services
+   only use put() and isUploadUrl(), so another driver (for example S3 or Cloudflare R2) can replace this one without
+   changing them; the HTTP layer serves photos with read(). */
 import crypto from 'node:crypto';
 import { fail } from './lib/errors.js';
 
@@ -17,21 +16,23 @@ function sniff(buf) {
   return null;
 }
 
-export function createLocalStorage(dir) {
-  fs.mkdirSync(dir, { recursive: true });
+export function createDbStorage(db) {
   const NAME = /^\/uploads\/([a-f0-9]{32}\.(?:jpg|png|webp|gif))$/;
   return {
-    /* Saves image bytes; returns the URL to use in pages. Identical images share one file. */
-    put(bytes) {
+    /* Saves image bytes; returns the URL to use in pages. Identical images share one row. */
+    async put(bytes) {
       if (bytes.length > MAX_IMAGE_BYTES) fail('That image is too large. Try a smaller photo.', 413);
       const type = sniff(bytes); if (!type) fail('Upload a JPEG, PNG, WebP or GIF image.');
       const name = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 32) + '.' + TYPES[type];
-      const file = path.join(dir, name);
-      if (!fs.existsSync(file)) fs.writeFileSync(file, bytes);
+      await db.run('INSERT INTO uploads (name, type, size, bytes, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING', name, type, bytes.length, bytes, Date.now());
       return '/uploads/' + name;
     },
     isUploadUrl: url => NAME.test(String(url || '')),
-    /* The file behind an /uploads/... URL path, or null. */
-    fileFor(urlPath) { const m = NAME.exec(urlPath); return m ? path.join(dir, m[1]) : null; }
+    /* The photo behind an /uploads/... URL path as { type, bytes }, or null. */
+    async read(urlPath) {
+      const m = NAME.exec(urlPath); if (!m) return null;
+      const row = await db.get('SELECT type, bytes FROM uploads WHERE name = ?', m[1]);
+      return row ? { type: row.type, bytes: Buffer.from(row.bytes) } : null;
+    }
   };
 }

@@ -1,6 +1,7 @@
 /* The API endpoints. Each handler receives { session, params, query, body, ip } and returns the response data
    (errors are thrown as HttpError by the services). Rate limits guard sign-in, sign-up, resets, uploads and messages. */
 import { HttpError } from '../lib/errors.js';
+import { MAX_IMAGE_BYTES } from '../storage.js';
 
 export function routes({ services, storage, limiter }) {
   const { accounts, jobs, profiles, messaging, notifications } = services;
@@ -47,12 +48,13 @@ export function routes({ services, storage, limiter }) {
     { method: 'GET', path: '/api/cities', handler: () => profiles.cities() },
 
     // Photos: the browser sends a compressed image as a data: URL and gets back its /uploads/... URL.
-    { method: 'POST', path: '/api/uploads', handler: ({ session, body }) => {
+    { method: 'POST', path: '/api/uploads', handler: async ({ session, body }) => {
       if (!session.userId) throw new HttpError(401, 'Sign in to continue.');
       limit(userKey(session) + ':upload', 60, 600000, 'Too many uploads. Wait a few minutes and try again.');
       const m = /^data:image\/[a-z]+;base64,([A-Za-z0-9+/=]+)$/.exec(String(body.dataUrl || ''));
       if (!m) throw new HttpError(400, 'Upload a JPEG, PNG, WebP or GIF image.');
-      return { url: storage.put(Buffer.from(m[1], 'base64')) };
+      if (m[1].length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) throw new HttpError(413, 'That image is too large. Try a smaller photo.'); // checked before decoding
+      return { url: await storage.put(Buffer.from(m[1], 'base64')) };
     } },
 
     // Notifications and messages

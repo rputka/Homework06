@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { createApp } from './app.js';
 
 const config = loadConfig();
-const app = createApp(config);
-app.server.listen(config.port, () => console.log(`Nearhand is running at http://localhost:${config.port}  (database: ${config.dbFile})`));
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { app.close(); process.exit(0); });
+const app = await createApp(config);
+const where = config.databaseUrl ? `PostgreSQL at ${new URL(config.databaseUrl).hostname}` : config.dbFile;
+app.server.listen(config.port, () => console.log(`Nearhand is running at ${config.production ? config.appUrl : `http://localhost:${config.port}`}  (database: ${where})`));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await app.close().catch(() => {}); process.exit(0); });
