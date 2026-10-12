@@ -1,0 +1,13 @@
+sequenceDiagram
+    actor E as Employer
+    participant B as Browser
+    participant S as Server
+    participant D as Database
+    actor K as Worker
+    E->>B: Click "Hire"
+    B->>S: POST /api/action/hire
+    S->>S: Check the rules (is this your job? is it still open?)
+    S->>D: Save the changes
+    S-->>B: Updated data
+    B-->>E: Show "Worker Selected"
+    S-)K: Email "You're hired" (in the background)

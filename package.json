@@ -1,0 +1,15 @@
+{
+  "name": "nearhand",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local freelance marketplace: employers post jobs, nearby workers bid.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "test": "node --test --test-concurrency=1 server/test/*.test.js",
+    "reset-db": "node server/reset-db.js"
+  },
+  "type": "module"
+}

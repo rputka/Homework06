@@ -1,0 +1,15 @@
+flowchart LR
+    subgraph Browser
+        V["Pages<br/>(js/views)"]
+        C["Clicks and forms<br/>(js/app)"]
+        A["API client<br/>(js/data/api.js)"]
+        V --- C --> A
+    end
+    subgraph Server["Node.js server"]
+        H["Web server<br/>(server/server.js)"]
+        R["Business rules<br/>(js/services/services.js)"]
+        H --> R
+    end
+    A -- "JSON over HTTP" --> H
+    R --> DB[("SQLite<br/>(server/db.js)")]
+    R --> EM["Email<br/>(server/email.js)"]

@@ -1,0 +1,14 @@
+stateDiagram-v2
+    Open: Open for Bids
+    Selected: Worker Selected
+    Funded: Payment Funded
+    Progress: In Progress
+    Approval: Awaiting Approval
+    Done: Completed
+    [*] --> Open : employer posts
+    Open --> Selected : employer hires
+    Selected --> Funded : employer pays into escrow
+    Funded --> Progress : worker starts
+    Progress --> Approval : worker finishes
+    Approval --> Done : employer approves, payment released
+    Done --> [*]

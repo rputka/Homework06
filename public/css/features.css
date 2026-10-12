@@ -1,0 +1,120 @@
+/* Feature styles: maps, schedules, notifications, portfolio */
+
+/* maps */
+.map{height:320px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface-2);overflow:hidden;z-index:0}
+.results-map{height:300px;margin-bottom:16px}
+.detail-map{height:220px;margin-top:12px}
+.map-off{margin:0;padding:24px;color:var(--muted);text-align:center}
+.pin{background:none;border:0}
+.pin span{display:block;width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--primary);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.pin.worker span{background:var(--ok)}
+.pin.me span{border-radius:50%;transform:none;width:16px;height:16px;margin:4px;background:var(--focus)}
+.leaflet-interactive.radius{stroke:var(--primary);fill:var(--primary)}
+.leaflet-container{font:inherit}
+.leaflet-popup-content{font-size:.88rem;line-height:1.45}
+.leaflet-popup-content a{color:var(--primary)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}}
+:root[data-theme="dark"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+.ico{width:14px;height:14px;vertical-align:-2px;margin-right:4px}
+
+/* schedule fields on the job form: repeat rows appear only when the job repeats */
+.sched{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 16px 4px;margin:4px 0 16px;min-width:0}
+/* float keeps the legend inside the box (not on its border), aligned with the fields below */
+.sched legend{float:left;width:100%;padding:0;margin:0 0 4px;font:600 1rem var(--font-display);color:var(--text)}
+.sched legend + *{clear:both}
+.sched .repeat-only,.sched .weekly-only{display:none}
+.sched:has(select[name=schedRepeat] option:checked:not([value=none])) .repeat-only{display:block}
+.sched:has(select[name=schedRepeat] option:checked[value=weekly]) .weekly-only,
+.sched:has(select[name=schedRepeat] option:checked[value=biweekly]) .weekly-only{display:block}
+
+/* notifications */
+.bell{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;color:var(--text)}
+.bell:hover{background:var(--surface-2);color:var(--text)}
+.bell .badge{position:absolute;top:2px;right:0;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:.68rem;font-weight:700;line-height:18px;text-align:center}
+.notif-card{padding:6px}
+.notif{display:flex;gap:12px;width:100%;text-align:left;padding:12px;border:0;border-radius:var(--r-md);background:none;color:var(--text);font:inherit;cursor:pointer}
+.notif + .notif{border-top:1px solid var(--line);border-radius:0}
+.notif:hover{background:var(--surface-2)}
+.notif .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.notif b{font-weight:500}
+.notif.unread b{font-weight:700}
+.notif-body{color:var(--muted);font-size:.9rem}
+.notif-dot{width:8px;height:8px;border-radius:50%;margin-top:7px;flex:none;background:transparent}
+.notif.unread .notif-dot{background:var(--primary)}
+.toggles{display:grid;gap:8px;margin-bottom:8px}
+.toggle{display:flex;gap:10px;align-items:center;font-weight:500;margin:0;cursor:pointer}
+.toggle input{width:16px;height:16px;accent-color:var(--primary)}
+
+/* portfolio */
+.form-card{margin-top:20px}
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.pf-item{margin:0;display:flex;flex-direction:column;gap:8px}
+.pf-item figcaption{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:.88rem}
+.pf-photo{display:block;width:100%;aspect-ratio:4/3;padding:0;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;cursor:zoom-in;background:var(--surface-2)}
+.pf-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.pf-add{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+.pf-kind{margin-bottom:12px}
+.pf-add .pair-only{display:none}
+.pf-add:has(#pkPair:checked) .pair-only{display:block}
+.pf-add:has(#pkPair:checked) .photo-only{display:none}
+.ba{position:relative;aspect-ratio:4/3;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--line);background:var(--surface-2);--pos:50%}
+.ba.lg{border-radius:var(--r-lg)}
+.ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;user-select:none;pointer-events:none}
+.ba-after{position:absolute;inset:0;clip-path:inset(0 0 0 var(--pos))}
+.ba-line{position:absolute;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.4);pointer-events:none}
+.ba-line::after{content:"";position:absolute;top:50%;left:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.ba-tag{position:absolute;bottom:8px;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.55);color:#fff;font-size:.72rem;font-weight:600;pointer-events:none}
+.ba-tag.before{left:8px}.ba-tag.after{right:8px}
+.ba-range{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
+.ba-range:focus-visible + *,.ba:has(.ba-range:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
+
+/* job form: "Add a new category" reveals a name box */
+.cat-pick .new-cat{display:none}
+.cat-pick:has(select[name=category] option:checked[value="__new"]) .new-cat{display:block}
+
+/* city suggestions under the City box */
+.ac{position:relative}
+.ac-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-md);box-shadow:var(--shadow-hover)}
+.ac-list li{padding:8px 10px;border-radius:var(--r-sm);cursor:pointer}
+.ac-list li:hover,.ac-list li.on{background:var(--primary-soft)}
+
+/* job form: budget minimum and maximum side by side in one field */
+.range-inputs{display:flex;align-items:center;gap:8px}
+.range-inputs input{flex:1;min-width:0}
+.range-inputs span{color:var(--muted);font-size:.9rem}
+
+/* messages */
+.nav a .count{display:inline-block;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--bad);color:#fff;font-size:.68rem;font-weight:700;line-height:18px;text-align:center;vertical-align:1px}
+.messenger{display:grid;grid-template-columns:300px minmax(0,1fr);padding:0;height:min(640px,calc(100vh - 220px));min-height:420px;overflow:hidden}
+.convo-list{border-right:1px solid var(--line);overflow-y:auto;padding:6px}
+.convo{display:flex;gap:10px;align-items:center;padding:10px;border-radius:var(--r-md);text-decoration:none;color:var(--text)}
+.convo:hover{background:var(--surface-2);color:var(--text)}
+.convo.active{background:var(--primary-soft)}
+.convo .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.convo b{font-weight:600}
+.convo.unread b{font-weight:700}
+.convo-last{font-size:.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.convo.unread .convo-last{color:var(--text)}
+.convo .notif-dot{background:var(--primary);margin:0}
+.thread{display:flex;flex-direction:column;min-width:0;min-height:0}
+.thread-none{flex:1;display:grid;place-items:center}
+.thread-head{display:flex;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.thread-head .grow{flex:1;min-width:0}
+.thread-head .back{display:none}
+.thread-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.thread-empty{margin:auto}
+.bubble{max-width:75%;padding:8px 12px;border-radius:12px;background:var(--surface-2)}
+.bubble p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.bubble span{display:block;margin-top:2px;font-size:.72rem;color:var(--muted)}
+.bubble.mine{align-self:flex-end;background:var(--primary);color:var(--primary-text);border-bottom-right-radius:4px}
+.bubble.mine span{color:color-mix(in srgb,var(--primary-text) 70%,transparent);text-align:right}
+.bubble.theirs{align-self:flex-start;border-bottom-left-radius:4px}
+.composer{display:flex;gap:8px;align-items:flex-end;padding:12px;border-top:1px solid var(--line)}
+.composer textarea{min-height:44px;max-height:160px;resize:none}
+@media (max-width:760px){
+  .messenger{grid-template-columns:1fr}
+  .messenger.has-thread .convo-list{display:none}
+  .messenger:not(.has-thread) .thread{display:none}
+  .convo-list{border-right:0}
+  .thread-head .back{display:inline}
+}

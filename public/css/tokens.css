@@ -1,0 +1,47 @@
+/* Design tokens: colors, fonts, radii, shadows, light/dark themes.
+   One brand color (navy). --accent is kept as an alias of the brand color so older rules stay consistent;
+   amber is reserved for things that need the user's attention (--attn-*). */
+:root{
+  --bg:#F7F8FA; --surface:#FFFFFF; --surface-2:#F1F3F6; --text:#1A202C; --muted:#5F6B7A;
+  --line:#E2E6EB; --line-strong:#CDD3DB;
+  --primary:#1D3A5F; --primary-hover:#152C49; --primary-text:#FFFFFF; --primary-soft:#EAF0F7;
+  --accent:var(--primary); --accent-text:var(--primary-text); --star:#D69E2E;
+  --attn-bg:#FFF8EB; --attn-line:#F3D9A4; --attn-text:#7A4B0B;
+  --ok:#1F7A4D; --bad:#C53030; --focus:#3B82F6;
+  --c-open:#2B6CB0; --c-selected:#4C51BF; --c-funded:#6B46C1; --c-progress:#B7791F; --c-await:#C05621; --c-done:#1F7A4D;
+  --shadow:0 1px 2px rgba(16,24,40,.05);
+  --shadow-hover:0 4px 12px rgba(16,24,40,.08);
+  --r-sm:6px; --r-md:8px; --r-lg:10px;
+  --font-display:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141B; --surface:#151D27; --surface-2:#1C2633; --text:#E7EBF0; --muted:#9AA6B5;
+    --line:#273343; --line-strong:#364457;
+    --primary:#8FB3E0; --primary-hover:#A9C6EA; --primary-text:#0B1726; --primary-soft:#1B2A3D;
+    --star:#E2B04A;
+    --attn-bg:#2A2416; --attn-line:#5A4720; --attn-text:#F1D08A;
+    --ok:#5CC08A; --bad:#F08A80; --focus:#7FB0FF;
+    --c-open:#7FB0E8; --c-selected:#9AA3F0; --c-funded:#B39BF0; --c-progress:#E2B04A; --c-await:#F0A070; --c-done:#5CC08A;
+    --shadow:0 1px 2px rgba(0,0,0,.35);
+    --shadow-hover:0 4px 14px rgba(0,0,0,.4);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141B; --surface:#151D27; --surface-2:#1C2633; --text:#E7EBF0; --muted:#9AA6B5;
+  --line:#273343; --line-strong:#364457;
+  --primary:#8FB3E0; --primary-hover:#A9C6EA; --primary-text:#0B1726; --primary-soft:#1B2A3D;
+  --star:#E2B04A;
+  --attn-bg:#2A2416; --attn-line:#5A4720; --attn-text:#F1D08A;
+  --ok:#5CC08A; --bad:#F08A80; --focus:#7FB0FF;
+  --c-open:#7FB0E8; --c-selected:#9AA3F0; --c-funded:#B39BF0; --c-progress:#E2B04A; --c-await:#F0A070; --c-done:#5CC08A;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-hover:0 4px 14px rgba(0,0,0,.4);
+  color-scheme:dark;
+}

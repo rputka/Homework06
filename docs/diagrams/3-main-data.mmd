@@ -1,0 +1,34 @@
+classDiagram
+    direction LR
+    class User {
+        name
+        email
+        role: employer or worker
+        location
+    }
+    class Job {
+        title
+        budget
+        status
+    }
+    class Bid {
+        price
+        message
+    }
+    class Payment {
+        amount
+        status: held or released
+    }
+    class Review {
+        rating 1-5
+        text
+    }
+    class Message {
+        text
+    }
+    User "1" --> "*" Job : employer posts
+    User "1" --> "*" Bid : worker places
+    Job "1" --> "*" Bid : receives
+    Job "1" --> "0..1" Payment : escrow
+    Job "1" --> "0..2" Review : gets
+    User "1" --> "*" Message : sends
